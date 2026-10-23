@@ -2,7 +2,8 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - 'naqsh-negar-source.zip'
       - '.github/workflows/android-apk.yml'
@@ -15,52 +16,56 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Check source archive
         run: |
-          if [ ! -f naqsh-negar-source.zip ]; then
-            echo "::error::Upload naqsh-negar-source.zip to the repository root first."
+          test -f naqsh-negar-source.zip || {
+            echo "::error::Source ZIP not found"
             exit 1
-          fi
+          }
 
-      - name: Extract project source
+      - name: Extract project
         run: |
           mkdir -p "$RUNNER_TEMP/naqsh-negar"
           unzip -q naqsh-negar-source.zip -d "$RUNNER_TEMP/naqsh-negar"
           test -f "$RUNNER_TEMP/naqsh-negar/naqsh-negar/package.json"
           echo "PROJECT_DIR=$RUNNER_TEMP/naqsh-negar/naqsh-negar" >> "$GITHUB_ENV"
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Install web dependencies and build
+      - name: Install dependencies and build
         working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           npm ci
           npm run build
 
-      - name: Sync Capacitor Android project
+      - name: Sync Android
         working-directory: ${{ env.PROJECT_DIR }}
         run: npx cap sync android
 
-      - name: Build debug APK
+      - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}/android
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: naqsh-negar-debug-apk
